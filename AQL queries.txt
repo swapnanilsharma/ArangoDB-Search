@@ -1,0 +1,129 @@
+INSERT {_key: "Test"} into "airports" RETURN NEW
+RETURN DOCUMENT("airports/test")
+RETURN DOCUMENT("airports", ["test", "Test"])
+
+UPDATE {_key: "Test"} WITH {newVal: 1234} in "airports"
+RETURN NEW
+
+FOR docs IN ["Test", "test"]
+    UPDATE docs WITH {newVal: 123456} in "airports"
+    RETURN NEW
+
+FOR docs IN ["Test1", "test1"]
+    REMOVE docs IN "airports"
+
+FOR flight IN flights
+    FILTER flight.TailNum == "N592ML"
+    RETURN flight
+
+FOR airport IN airports
+FILTER airport.state == "TX"
+RETURN GEO_POINT(airport.long, airport.lat)
+
+FOR airport IN airports
+FILTER GEO_DISTANCE([-95.01792778, 30.68586111], [airport.long, airport.lat]) <= 50000
+RETURN airport
+
+FOR airport IN airports
+FILTER airport.city == "Livingston"
+FOR flight in flights
+FILTER flight._to == airport._id
+RETURN {"airport": airport.name, "flight": flight.FlightNum}
+
+FOR airport IN airports
+COLLECT state = airport.state WITH COUNT INTO total
+SORT total DESC
+RETURN {"state": state, "total airports": total}
+
+FOR flight IN flights
+COLLECT AGGREGATE
+minDistance = min(flight.Distance),
+maxDistance = max(flight.Distance)
+RETURN {"Shortest Flight": minDistance, "Longest Flight": maxDistance}
+
+
+
+
+
+
+####################################################################################################
+db._useDatabase('Getting-Started')
+a = require('@arangodb/analyzers')
+a.toArray()
+a.analyzer('text_en').properties()
+a.analyzer('text_en').features()
+a.analyzer('identity').features()
+db._query("RETURN TOKENS('The quick brown fox jumps over the lazy dog', 'text_en')")
+db._query("RETURN TOKENS('The quick brown fox jumps over the lazy dog', 'identity')")
+
+a.save('configuredAnalyzer', 'text', {
+...> locale: 'en.UTF-8',
+...> case: 'upper',
+...> stopwords: ['the', 'and', 'of'],
+...> accent: false,
+...> stemming: false})
+
+a.remove('configuredAnalyzer')
+
+db._createView('firstView', 'arangosearch', {})
+db._views()
+db._view('firstView').properties()
+
+db._view('firstView').properties({links: {"imdb_vertices": {"includeAllFields": true, "fields": {"data.description": {"analyzers": ["text_en"]}}}}})
+
+db._query("FOR docs IN firstView COLLECT WITH COUNT INTO num RETURN num")
+
+for d in firstView
+SEARCH ANALYZER(d.description == 'ninja', 'text_en')
+LIMIT 20
+RETURN {title: d.title, description: d.description}
+
+for d in firstView
+SEARCH PHRASE(d.description, 'art of the ninja', 'text_en')
+LIMIT 20
+RETURN {title: d.title, description: d.description}
+
+for d in firstView
+SEARCH PHRASE(d.description, 'art', 2, 'ninja', 'text_en')
+LIMIT 20
+RETURN {title: d.title, description: d.description}
+
+for d in firstView
+  SEARCH ANALYZER(MIN_MATCH(
+  PHRASE(d.description, 'feudal japan'),
+  PHRASE(d.description, 'the ninja'), 
+  PHRASE(d.description, 'mutated turtles'), 2
+  ), 'text_en')
+  LIMIT 20
+  RETURN {title: d.title, description: d.description}
+
+for d in firstView
+SEARCH ANALYZER(STARTS_WITH(d.title, 'st'), 'text_en')
+LIMIT 20
+RETURN d.title
+
+for d in firstView
+SEARCH ANALYZER(d.description IN TOKENS(
+'amazing action world alien sci-fi science documental galaxy', 'text_en'), 'text_en')
+SORT BM25(d) DESC
+LIMIT 20
+RETURN {
+          score: BM25(d),
+          title: d.title,
+          description: d.description
+       }
+
+for d in firstView
+SEARCH ANALYZER(d.description IN TOKENS(
+'amazing action world alien sci-fi science documental', 'text_en') ||
+BOOST(d.description IN TOKENS('galaxy', 'text_en'), 5), 'text_en')
+SORT BM25(d) DESC
+LIMIT 20
+RETURN {
+          score: BM25(d),
+          title: d.title,
+          description: d.description
+       }
+
+
+
